@@ -16,6 +16,14 @@ A weather information MCP server that provides tools for:
 - Getting weather by city name
 - (Coming soon) Global weather information
 
+### [Calendar MCP](/calendar)
+
+A calendar integration MCP server that provides tools for:
+- Managing your calendar events
+- Scheduling new appointments
+- Getting reminders about upcoming events
+- Organizing your schedule
+
 ## Getting Started
 
 Each MCP server is contained in its own directory with its own README and setup instructions. Navigate to the specific MCP server directory you're interested in to learn more.
