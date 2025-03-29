@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "weather": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "D:\\Cascade Projects\\opensource\\Job Board\\weather\\dist\\index.js"
+      ]
+    }
+  }
+}
