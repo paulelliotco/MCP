@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import dotenv from "dotenv";
+import * as googleCalendar from "./googleCalendar.js";
 
 // Load environment variables
 dotenv.config();
@@ -20,20 +21,46 @@ server.tool(
     timeMax: z.string().optional().describe("End time for the event search (ISO format)"),
     maxResults: z.number().optional().describe("Maximum number of events to return")
   },
-  async ({ timeMin, timeMax, maxResults }) => {
-    // This is a placeholder implementation
-    // In a real implementation, you would use the Google Calendar API
-    return {
-      content: [{ 
-        type: "text", 
-        text: `Getting events from ${timeMin || 'now'} to ${timeMax || 'indefinite future'}, max ${maxResults || 10} results.
-        
-Example events:
-1. Team Meeting - 2023-04-01T10:00:00Z to 2023-04-01T11:00:00Z
-2. Project Review - 2023-04-02T14:00:00Z to 2023-04-02T15:30:00Z
-3. Client Call - 2023-04-03T09:00:00Z to 2023-04-03T09:30:00Z`
-      }]
-    };
+  async ({ timeMin, timeMax, maxResults = 10 }) => {
+    try {
+      const events = await googleCalendar.listEvents(
+        timeMin,
+        timeMax,
+        maxResults
+      );
+
+      if (events.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: "No upcoming events found in the specified time range."
+          }]
+        };
+      }
+
+      const formattedEvents = events.map((event, index) => {
+        const summary = event.summary || 'Untitled Event';
+        const start = event.start?.dateTime ? new Date(event.start.dateTime).toLocaleString() : 'Unknown';
+        const end = event.end?.dateTime ? new Date(event.end.dateTime).toLocaleString() : 'Unknown';
+        return `${index + 1}. ${summary} - ${start} to ${end}`;
+      }).join('\n');
+
+      return {
+        content: [{
+          type: "text",
+          text: `Upcoming events (${events.length}):\n\n${formattedEvents}`
+        }]
+      };
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error fetching events: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
   }
 );
 
@@ -48,19 +75,35 @@ server.tool(
     endDateTime: z.string().describe("End date and time (ISO format)")
   },
   async ({ summary, description, location, startDateTime, endDateTime }) => {
-    // This is a placeholder implementation
-    // In a real implementation, you would use the Google Calendar API
-    return {
-      content: [{ 
-        type: "text", 
-        text: `Created event:
-Title: ${summary}
-Description: ${description || 'N/A'}
-Location: ${location || 'N/A'}
-Start: ${startDateTime}
-End: ${endDateTime}`
-      }]
-    };
+    try {
+      const event = await googleCalendar.createEvent(
+        summary,
+        description,
+        location,
+        startDateTime,
+        endDateTime
+      );
+
+      const start = event.start?.dateTime ? new Date(event.start.dateTime).toLocaleString() : 'Unknown';
+      const end = event.end?.dateTime ? new Date(event.end.dateTime).toLocaleString() : 'Unknown';
+      const eventLink = event.htmlLink || 'No link available';
+
+      return {
+        content: [{
+          type: "text",
+          text: `Successfully created event:\n\nTitle: ${event.summary}\nDescription: ${event.description || 'N/A'}\nLocation: ${event.location || 'N/A'}\nStart: ${start}\nEnd: ${end}\n\nView in Google Calendar: ${eventLink}`
+        }]
+      };
+    } catch (error) {
+      console.error('Error creating event:', error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error creating event: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
   }
 );
 
@@ -71,23 +114,73 @@ server.tool(
     date: z.string().describe("The date to summarize (YYYY-MM-DD format)")
   },
   async ({ date }) => {
-    // This is a placeholder implementation
-    // In a real implementation, you would use the Google Calendar API
-    return {
-      content: [{ 
-        type: "text", 
-        text: `Summary for ${date}:
-        
-Morning:
-- No events scheduled
+    try {
+      const events = await googleCalendar.getEventsForDay(date);
 
-Afternoon:
-- Team Meeting (2:00 PM - 3:00 PM)
+      if (events.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: `No events scheduled for ${date}.`
+          }]
+        };
+      }
 
-Evening:
-- Dinner with clients (6:30 PM - 8:30 PM)`
-      }]
-    };
+      // Group events by time of day
+      const morning = [];
+      const afternoon = [];
+      const evening = [];
+
+      for (const event of events) {
+        if (!event.start?.dateTime) continue;
+
+        const eventDate = new Date(event.start.dateTime);
+        const hour = eventDate.getHours();
+
+        const formattedEvent = googleCalendar.formatEvent(event);
+
+        if (hour < 12) {
+          morning.push(formattedEvent);
+        } else if (hour < 17) {
+          afternoon.push(formattedEvent);
+        } else {
+          evening.push(formattedEvent);
+        }
+      }
+
+      // Format the summary
+      const formatSection = (title: string, events: string[]) => {
+        if (events.length === 0) return `${title}:\n- No events scheduled`;
+        return `${title}:\n- ${events.join('\n- ')}`;
+      };
+
+      const morningSection = formatSection('Morning', morning);
+      const afternoonSection = formatSection('Afternoon', afternoon);
+      const eveningSection = formatSection('Evening', evening);
+
+      const formattedDate = new Date(date).toLocaleDateString(undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      return {
+        content: [{
+          type: "text",
+          text: `Summary for ${formattedDate}:\n\n${morningSection}\n\n${afternoonSection}\n\n${eveningSection}`
+        }]
+      };
+    } catch (error) {
+      console.error('Error getting day summary:', error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error getting day summary: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
   }
 );
 
@@ -98,32 +191,177 @@ server.tool(
     startDate: z.string().optional().describe("Start date of the week (YYYY-MM-DD format)")
   },
   async ({ startDate }) => {
-    // This is a placeholder implementation
-    // In a real implementation, you would use the Google Calendar API
-    const start = startDate || 'current week';
-    return {
-      content: [{ 
-        type: "text", 
-        text: `Week summary starting from ${start}:
-        
-Monday:
-- Team standup (9:00 AM - 9:30 AM)
-- Project planning (2:00 PM - 4:00 PM)
+    try {
+      const eventsByDay = await googleCalendar.getEventsForWeek(startDate);
 
-Tuesday:
-- Client meeting (11:00 AM - 12:00 PM)
+      // Check if there are any events
+      const totalEvents = Object.values(eventsByDay).reduce(
+        (count, events) => count + events.length,
+        0
+      );
 
-Wednesday:
-- No events scheduled
+      if (totalEvents === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: `No events scheduled for the week${startDate ? ` starting from ${startDate}` : ''}.`
+          }]
+        };
+      }
 
-Thursday:
-- Product demo (10:00 AM - 11:00 AM)
-- Team lunch (12:00 PM - 1:30 PM)
+      // Format the week summary
+      const weekSummary = Object.entries(eventsByDay).map(([dateStr, events]) => {
+        const dayName = googleCalendar.getDayName(dateStr);
 
-Friday:
-- Weekly review (3:00 PM - 4:00 PM)`
-      }]
-    };
+        if (events.length === 0) {
+          return `${dayName} (${dateStr}):\n- No events scheduled`;
+        }
+
+        const formattedEvents = events.map(event => {
+          return `- ${googleCalendar.formatEvent(event)}`;
+        }).join('\n');
+
+        return `${dayName} (${dateStr}):\n${formattedEvents}`;
+      }).join('\n\n');
+
+      // Get the date range for the title
+      const dates = Object.keys(eventsByDay).sort();
+      const weekStart = dates[0];
+      const weekEnd = dates[dates.length - 1];
+
+      const formatDate = (dateStr: string) => {
+        return new Date(dateStr).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric'
+        });
+      };
+
+      return {
+        content: [{
+          type: "text",
+          text: `Week Summary (${formatDate(weekStart)} - ${formatDate(weekEnd)}):\n\n${weekSummary}`
+        }]
+      };
+    } catch (error) {
+      console.error('Error getting week summary:', error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error getting week summary: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool to create a task
+server.tool(
+  "create-task",
+  {
+    title: z.string().describe("Title of the task"),
+    description: z.string().optional().describe("Description of the task"),
+    dueDate: z.string().describe("Due date for the task (YYYY-MM-DD format)"),
+    priority: z.enum(['high', 'medium', 'low']).optional().describe("Priority of the task")
+  },
+  async ({ title, description, dueDate, priority }) => {
+    try {
+      // Create a task as a calendar event with specific formatting
+      const taskPrefix = priority ? `[${priority.toUpperCase()}] ` : '';
+      const taskTitle = `${taskPrefix}TASK: ${title}`;
+
+      // Set the task as an all-day event on the due date
+      const dueDateTime = new Date(dueDate);
+      dueDateTime.setHours(23, 59, 59); // End of day
+
+      // Create task description
+      const taskDescription = `${description || 'No description'}\n\nThis is a task created via Calendar MCP.`;
+
+      const event = await googleCalendar.createEvent(
+        taskTitle,
+        taskDescription,
+        undefined, // No location for tasks
+        dueDate, // Start date (beginning of day)
+        dueDateTime.toISOString() // End date (end of day)
+      );
+
+      return {
+        content: [{
+          type: "text",
+          text: `Successfully created task:\n\nTitle: ${title}\nPriority: ${priority || 'Not specified'}\nDue Date: ${new Date(dueDate).toLocaleDateString()}\nDescription: ${description || 'N/A'}\n\nView in Google Calendar: ${event.htmlLink || 'No link available'}`
+        }]
+      };
+    } catch (error) {
+      console.error('Error creating task:', error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error creating task: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool to get upcoming tasks
+server.tool(
+  "get-tasks",
+  {
+    maxResults: z.number().optional().describe("Maximum number of tasks to return")
+  },
+  async ({ maxResults = 10 }) => {
+    try {
+      // Get upcoming events and filter for tasks
+      const events = await googleCalendar.listEvents(
+        undefined,
+        undefined,
+        100 // Get more events to filter from
+      );
+
+      // Filter for events that have 'TASK:' in the title
+      const tasks = events
+        .filter(event => event.summary && event.summary.includes('TASK:'))
+        .slice(0, maxResults);
+
+      if (tasks.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: "No upcoming tasks found."
+          }]
+        };
+      }
+
+      // Format tasks
+      const formattedTasks = tasks.map((task, index) => {
+        const title = task.summary?.replace(/^\[.*?\]\s*TASK:\s*/, '') || 'Untitled Task';
+        const priority = task.summary?.match(/^\[(.*?)\]/)?
+          ? task.summary?.match(/^\[(.*?)\]/)?.[1] || 'None'
+          : 'None';
+        const dueDate = task.start?.date || task.start?.dateTime
+          ? new Date(task.start.date || task.start.dateTime || '').toLocaleDateString()
+          : 'No due date';
+
+        return `${index + 1}. ${title} (Priority: ${priority}, Due: ${dueDate})`;
+      }).join('\n');
+
+      return {
+        content: [{
+          type: "text",
+          text: `Upcoming tasks (${tasks.length}):\n\n${formattedTasks}`
+        }]
+      };
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error fetching tasks: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
   }
 );
 

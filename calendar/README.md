@@ -6,6 +6,8 @@ A Model Context Protocol (MCP) server for interacting with Google Calendar. This
 
 This MCP server provides the following tools:
 
+### Calendar Management
+
 1. **get-events** - Get upcoming events from your Google Calendar
    - Parameters:
      - `timeMin` (optional) - Start time for the event search (defaults to now)
@@ -27,6 +29,19 @@ This MCP server provides the following tools:
 4. **get-week-summary** - Get a summary of events for the current week
    - Parameters:
      - `startDate` (optional) - Start date of the week (defaults to current week)
+
+### Task Management
+
+5. **create-task** - Create a new task in your Google Calendar
+   - Parameters:
+     - `title` - Title of the task
+     - `description` (optional) - Description of the task
+     - `dueDate` - Due date for the task (YYYY-MM-DD format)
+     - `priority` (optional) - Priority of the task (high, medium, low)
+
+6. **get-tasks** - Get a list of upcoming tasks
+   - Parameters:
+     - `maxResults` (optional) - Maximum number of tasks to return (default: 10)
 
 ## Setup
 
@@ -126,10 +141,17 @@ Replace `/ABSOLUTE/PATH/TO/MCP` with the actual path to your project.
 
 Once connected to Claude for Desktop, you can ask questions like:
 
+#### Calendar Management
 - "What's on my calendar today?"
 - "Create a meeting with John tomorrow at 2pm for 1 hour"
 - "Show me my schedule for next week"
 - "Do I have any events this weekend?"
+
+#### Task Management
+- "Create a high priority task to finish the report by Friday"
+- "What tasks do I have due this week?"
+- "Show me all my high priority tasks"
+- "Add a task to call the client by tomorrow"
 
 ## License
 

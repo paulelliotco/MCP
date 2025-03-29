@@ -1,7 +1,7 @@
 {
   "name": "calendar-mcp",
   "version": "1.0.0",
-  "description": "MCP server for Google Calendar integration",
+  "description": "MCP server for Google Calendar integration and task management",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -9,13 +9,13 @@
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js"
   },
-  "keywords": ["mcp", "calendar", "google-calendar", "model-context-protocol"],
+  "keywords": ["mcp", "calendar", "google-calendar", "model-context-protocol", "task-management"],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
     "axios": "^1.6.8",
-    "googleapis": "^133.0.0",
+    "googleapis": "^134.0.0",
     "zod": "^3.24.2",
     "dotenv": "^16.4.5"
   },
